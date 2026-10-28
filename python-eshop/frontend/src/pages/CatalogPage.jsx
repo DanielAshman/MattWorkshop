@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import CatalogFilters from '../components/CatalogFilters';
 import Pagination from '../components/Pagination';
 import ProductCard from '../components/ProductCard';
+import { useAuth } from '../context/AuthContext';
 
 export default function CatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -12,6 +13,9 @@ export default function CatalogPage() {
   const [catalog, setCatalog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { isAuthenticated } = useAuth();
+  // null until loaded: hearts stay hidden rather than all showing as empty.
+  const [favouriteIds, setFavouriteIds] = useState(null);
 
   const brandId = searchParams.get('brand') || '';
   const typeId = searchParams.get('type') || '';
@@ -38,6 +42,24 @@ export default function CatalogPage() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [brandId, typeId, page]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setFavouriteIds(null);
+      return;
+    }
+    api
+      .getFavourites()
+      .then((favourites) => setFavouriteIds(new Set(favourites.map((item) => item.id))))
+      .catch((err) => setError(err.message));
+  }, [isAuthenticated]);
+
+  async function handleToggleFavourite(item) {
+    const favourites = favouriteIds.has(item.id)
+      ? await api.removeFavourite(item.id)
+      : await api.addFavourite(item.id);
+    setFavouriteIds(new Set(favourites.map((favourite) => favourite.id)));
+  }
 
   function handleFilterChange({ brandId: nextBrand, typeId: nextType }) {
     const params = new URLSearchParams();
@@ -81,7 +103,12 @@ export default function CatalogPage() {
         <>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {catalog?.items.map((item) => (
-              <ProductCard key={item.id} item={item} />
+              <ProductCard
+                key={item.id}
+                item={item}
+                isFavourite={favouriteIds?.has(item.id)}
+                onToggleFavourite={favouriteIds ? handleToggleFavourite : undefined}
+              />
             ))}
           </div>
 

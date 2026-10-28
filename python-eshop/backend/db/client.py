@@ -311,6 +311,50 @@ class DatabaseClient:
                 return None
             return self._load_order(conn, row)
 
+    def list_favourites(self, buyer_id: str) -> list[CatalogItem]:
+        query = """
+            SELECT ci.*, cb.brand AS brand_name, ct.type AS type_name
+            FROM favourites f
+            JOIN catalog_items ci ON ci.id = f.catalog_item_id
+            JOIN catalog_brands cb ON cb.id = ci.catalog_brand_id
+            JOIN catalog_types ct ON ct.id = ci.catalog_type_id
+            WHERE f.buyer_id = ?
+            ORDER BY f.created_at DESC, f.rowid DESC
+        """
+        with self._connection() as conn:
+            rows = conn.execute(query, (buyer_id,)).fetchall()
+            return [_row_to_catalog_item(row) for row in rows]
+
+    def add_favourite(self, buyer_id: str, catalog_item_id: int, limit: int) -> bool:
+        """Save the Favourite unless the shopper already has `limit` of them.
+
+        The count and the insert are one statement, so simultaneous saves
+        cannot push a shopper past the limit. Returns whether a row was added.
+        """
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO favourites (buyer_id, catalog_item_id, created_at)
+                SELECT ?, ?, ?
+                WHERE (SELECT COUNT(*) FROM favourites WHERE buyer_id = ?) < ?
+                """,
+                (
+                    buyer_id,
+                    catalog_item_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    buyer_id,
+                    limit,
+                ),
+            )
+            return cursor.rowcount == 1
+
+    def remove_favourite(self, buyer_id: str, catalog_item_id: int) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                "DELETE FROM favourites WHERE buyer_id = ? AND catalog_item_id = ?",
+                (buyer_id, catalog_item_id),
+            )
+
     def has_catalog_data(self) -> bool:
         with self._connection() as conn:
             row = conn.execute("SELECT COUNT(*) FROM catalog_items").fetchone()

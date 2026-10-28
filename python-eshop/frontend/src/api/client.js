@@ -129,4 +129,10 @@ export const api = {
     }),
   getOrders: () => request('/api/orders'),
   getOrder: (orderId) => request(`/api/orders/${orderId}`),
+
+  getFavourites: () => request('/api/favourites'),
+  addFavourite: (catalogItemId) =>
+    request(`/api/favourites/${catalogItemId}`, { method: 'PUT' }),
+  removeFavourite: (catalogItemId) =>
+    request(`/api/favourites/${catalogItemId}`, { method: 'DELETE' }),
 };
